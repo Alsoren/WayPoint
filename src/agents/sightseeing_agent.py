@@ -3,11 +3,11 @@ from google.adk.agents import LlmAgent
 from ..mcp_tools.osm import osm_mcp
 from ..mcp_tools.weather import weather_mcp
 from ..schemas import SightseeingSearchResult
-
+from ..config import MODEL
 
 sightseeing_agent = LlmAgent(
     name="sightseeing_agent",
-    model="gemini-3.5-flash-lite",
+    model=MODEL,
     description=(
         "Checks the destination weather first and recommends suitable "
         "places and activities accordingly."

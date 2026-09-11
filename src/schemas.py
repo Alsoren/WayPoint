@@ -69,15 +69,29 @@ class TravelContext(BaseModel):
         description="Preferred travel pace: slow, medium, or fast.",
     )
 
-    preferred_airport: str | None = Field(
+    preferred_origin_airport: str | None = Field(
         default=None,
-        description="Preferred airport explicitly stated by the user.",
+        description=(
+            "Preferred departure airport explicitly stated by the user, "
+            "for cities with multiple airports (e.g. SAW vs IST)."
+        ),
+    )
+
+    preferred_return_airport: str | None = Field(
+        default=None,
+        description=(
+            "Preferred arrival/return airport explicitly stated by the "
+            "user, for cities with multiple airports. May differ from "
+            "preferred_origin_airport for open-jaw or mixed-airport trips."
+        ),
     )
 
     preferred_hotel_area: str | None = Field(
         default=None,
         description="Preferred hotel neighborhood or area, such as Çankaya.",
     )
+
+    preferred_hote_star: int | None = None
 
 
 TravelField = Literal[
@@ -92,9 +106,12 @@ TravelField = Literal[
     "currency",
     "travel_theme",
     "travel_pace",
-    "preferred_airport",
+    "preferred_origin_airport",
+    "preferred_return_airport",
     "preferred_hotel_area",
+    "preferred_hote_star",
 ]
+
 
 
 class ExtractionResult(BaseModel):
@@ -124,6 +141,8 @@ class FlightOption(BaseModel):
     flight_number: str | None = None
     origin: str
     destination: str
+    origin_airport: str
+    destination_airport: str
     departure_time: str
     arrival_time: str
     price: float
@@ -141,9 +160,10 @@ class HotelOption(BaseModel):
     name: str
     location: str
     rating: float | None = None
-    nightly_price: float
+    nightly_price: float | None = None
     total_price: float | None = None
     currency: str = "TRY"
+    hotel_star: int | None = None
     amenities: list[str] = Field(default_factory=list)
 
 

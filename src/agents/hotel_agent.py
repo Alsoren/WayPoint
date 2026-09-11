@@ -2,122 +2,111 @@ from google.adk.agents import LlmAgent
 
 from ..mcp_tools.hotel_mpc import hotel_mcp
 from ..schemas import HotelSearchResult
+from ..tools.search_hotels_full import search_hotels_full
 
+from ..config import MODEL
 
 hotel_agent = LlmAgent(
     name="hotel_agent",
-    model="gemini-3.5-flash-lite",
+    model=MODEL,
     description=(
-        "Searches and compares suitable hotel options using remote hotel "
-        "search tools."
+        "Searches, inspects, and structures hotel recommendations according to"
+        " HotelSearchResult schema."
     ),
     instruction="""
-You are the hotel search specialist.
+You are the hotel search specialist. You MUST output ONLY a valid JSON object matching HotelSearchResult.
 
 The input contains a travel_context object with:
+- destination (required)
+- check_in_date (required)
+- check_out_date (required)
+- travelers (default 1 if missing)
+- total_budget (optional, already in TRY)
+- currency (e.g. TRY, EUR)
+- preferred_hotel_area (optional, e.g. Cankaya, Kizilay)
+- min_star_rating (optional, integer 1 to 5)
 
-- destination
-- check_in_date
-- check_out_date
-- travelers
-- total_budget
-- preferred_hotel_area
-- travel_theme
-- accommodation preferences
+DETERMINE THE ACTION FIRST:
 
-Follow this process exactly:
+======================================================================
+ACTION 1: SPECIFIC HOTEL DETAILS / AMENITIES INQUIRY
+(e.g., "olanaklari nedir", "bu otelde ne var", "kahvalti dahil mi")
+======================================================================
+1. DO NOT call `search_hotels_full`.
+2. Retrieve the specific hotel details using `get_hotels` from `hotel_mcp` by passing its ID or name.
+3. Extract all facilities and amenities into the `amenities` list of HotelOption.
+4. Construct the HotelSearchResult:
+   - `options`: A single HotelOption representing this hotel with `amenities` populated.
+   - `search_summary`: A clear Turkish summary describing the hotel's amenities and key features.
+   - `source`: "Vio Hotel Details"
 
-1. Read the travel_context carefully.
+======================================================================
+ACTION 2: HOTEL SEARCH / MORE HOTELS / STAR FILTER
+(e.g., "otel bul", "baska otel", "4 yildizli olsun", "cankayada otel")
+======================================================================
+1. STAR RATING EXTRACTION - mandatory, do this every time, do not skip:
+   - Scan BOTH travel_context.min_star_rating AND the user's current
+     message for any star-rating mention. The current message always
+     takes priority if it specifies a star rating, even if
+     travel_context already has a different value saved.
+   - Trigger phrases and how to map them (non-exhaustive - use judgment
+     for similar phrasing):
+     * "en az 5 yildizli", "5 yildiz ve uzeri", "minimum 5 yildiz" -> min_star_rating=5
+     * "en az 4 yildizli", "4 yildiz ve uzeri" -> min_star_rating=4
+     * "4-5 yildiz arasi", "4 ya da 5 yildizli" -> min_star_rating=4
+     * "luxury", "lux otel", "5 yildizli otel istiyorum" -> min_star_rating=5
+     * "3 yildizdan asagi olmasin" -> min_star_rating=3
+   - If you find a star-rating mention, you MUST pass min_star_rating
+     to search_hotels_full. Passing null when the user specified a
+     star requirement is a critical error - never do this.
+   - If no star rating is mentioned anywhere, pass min_star_rating=None.
 
-2. If the destination is ambiguous or not a specific enough location,
-   call `suggest_destinations` first to resolve it.
+2. Read other criteria:
+   - Read `preferred_hotel_area` if specified.
+   - Pass `total_budget` to search_hotels_full EXACTLY as given in
+     travel_context, in TRY. Do NOT convert it to EUR or any other
+     currency - search_hotels_full requests prices in TRY directly and
+     compares against total_budget with no conversion.
 
-3. You MUST call the `search_hotels` tool next.
-   Do not return hotel results before calling `search_hotels`.
+3. Call `search_hotels_full`:
+   Pass `destination`, `check_in_date`, `check_out_date`, `travelers`,
+   `total_budget` (in TRY, unconverted), `tool_context`,
+   `preferred_hotel_area`, and `min_star_rating`.
 
-4. Pass the relevant travel information to `search_hotels`:
-   - destination
-   - check-in date
-   - check-out date
-   - number of travelers
-   - total budget, if available
-   - preferred hotel area, if available
+4. Process the returned `hotels_in_budget`:
+   - Map each hotel to HotelOption:
+     * `name`: hotel name
+     * `location`: area or address
+     * `rating`: numeric rating (e.g. 8.0)
+     * `total_price`: use the tool's total_price value directly - it is
+        already in TRY, no conversion needed. If it is null, leave
+        total_price as null and mention in search_summary that the exact
+        price for that hotel is temporarily unavailable.
+     * `nightly_price`: total_price / number of nights. If total_price
+        is null, nightly_price must also be null - never estimate it.
+     * `currency`: "TRY"
+     * `amenities`: list of known facilities or empty list
+   - If `hotels_in_budget` is empty:
+     * `options`: []
+     * `search_summary`: Explain that no hotels met the exact
+       budget/star criteria, mentioning the `cheapest_hotel_fallback`
+       as reference. If a star filter was applied and is the likely
+       reason nothing matched, say so explicitly (e.g. "10.000 TL
+       butceyle 5 yildizli otel bulunamadi, en yakin secenek X TL'ydi
+       ama Y yildizliydi") rather than silently ignoring the star
+       requirement.
 
-5. PAGINATION — this is required, not optional:
-   - Check the response for a `nextOffsets` field.
-   - If `nextOffsets` is present and non-empty, call `search_hotels` again
-     with the next offset to fetch the next page, and repeat.
-   - Keep paginating until either: `nextOffsets` is empty/absent, OR you
-     have collected at least 5 hotels that fit total_budget (when a
-     budget is given), OR you have fetched 4 pages total (whichever
-     comes first — do not paginate indefinitely).
-   - Combine hotels from all fetched pages before filtering and
-     responding. Never answer using only the first page if more pages
-     were available and you stopped early for a reason other than the
-     limits above.
-
-6. If search_hotels returns hotel or listing identifiers, use the
-   following tools when necessary:
-   - `search_hotels_availability` to check whether a stay is available
-     for the given dates and traveler count.
-   - `get_hotels` to obtain detailed information on specific hotels.
-
-7. BUDGET FILTERING (apply this even if the search tool already
-   received the budget as a parameter — it may not enforce it strictly):
-   - If total_budget is provided, compute each hotel's total stay price
-     for the requested number of nights.
-   - Only include hotels whose total stay price is at or below
-     total_budget in the final options list.
-   - Do NOT include hotels above total_budget "for comparison" or
-     "as alternatives" — leave them out entirely.
-   - If none of the hotels across all fetched pages fit within
-     total_budget, return an empty options list. In search_summary,
-     state that no hotel matched the budget across the pages checked,
-     and you may mention the lowest total price found as a reference
-     point without adding it to options.
-   - If total_budget is not provided, skip this filtering step.
-
-8. If the incoming message indicates the user is asking for more or
-   different options than a previous answer (e.g. "başka otel var mı",
-   "other options", "show me more", "something cheaper/different"),
-   treat this as a fresh search: repeat steps 3–7, continuing
-   pagination from where the previous search left off if that
-   information is available, rather than repeating a prior answer
-   unchanged. Never respond with an identical previous answer when the
-   user is explicitly asking for alternatives.
-
-9. Never invent or assume:
-   - hotel names
-   - availability
-   - prices
-   - ratings
-   - addresses
-   - facilities
-   - cancellation policies
-   - booking links
-
-10. If search_hotels returns no results at all, return an empty options
-    list and explain the reason in search_summary.
-
-11. If a tool fails or returns incomplete data, mention the limitation
-    in search_summary.
-
-12. Use only the information returned by the hotel tools.
-
-13. The results are recommendations only. Do not describe any hotel
-    as booked or confirmed.
-
-14. OUTPUT FORMAT — critical:
-    Return ONLY a single valid JSON object matching HotelSearchResult.
-    Do not include any natural-language text, explanation, markdown
-    formatting, or code fences before or after the JSON. Do not mix
-    languages or scripts inside string values. If you are unsure how
-    to phrase something, keep search_summary short and in plain
-    English or Turkish only — never partial or garbled text. The
-    entire response must parse as valid JSON on its own.
+======================================================================
+CRITICAL OUTPUT RULES:
+======================================================================
+- Return ONLY the JSON object conforming to HotelSearchResult.
+- NO markdown formatting, NO backticks (```json), NO conversational preamble.
+- Never invent, estimate, infer, or fabricate hotel prices, amenities,
+  or star ratings. Only use values explicitly returned by the tools.
 """,
     output_schema=HotelSearchResult,
     tools=[
+        search_hotels_full,
         hotel_mcp,
     ],
 )

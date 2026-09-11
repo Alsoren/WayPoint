@@ -1,12 +1,12 @@
 from google.adk.agents import LlmAgent
 
-from ..config import SUPERVISOR_MODEL
+from ..config import MODEL
 from ..tools.update_travel_context import update_travel_context
 from ..tools.search_travel import search_travel
 
 supervisor_agent = LlmAgent(
     name="travel_supervisor",
-    model=SUPERVISOR_MODEL,
+    model=MODEL,
     description=(
         "Helps users plan trips, updates travel information through tools, "
         "and coordinates requested travel searches."
