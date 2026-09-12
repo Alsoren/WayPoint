@@ -6,6 +6,7 @@ from google.adk.tools.mcp_tool.mcp_session_manager import (
 
 from mcp import StdioServerParameters
 
+#özellikle 'attraction' ve 'museum' gibi geniş/karmaşık Overpass sorgusu gerektiren kategorilerde sürekli timeout oluyor sonradan bak
 
 osm_mcp = McpToolset(
     connection_params=StdioConnectionParams(
@@ -15,7 +16,8 @@ osm_mcp = McpToolset(
                 "-y",
                 "osm-mcp",
             ],
-        )
+        ),
+        timeout=30,
     ),
 
     tool_filter=[

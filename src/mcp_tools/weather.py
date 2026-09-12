@@ -13,7 +13,8 @@ weather_mcp = McpToolset(
                 "-y",
                 "open-meteo-mcp-lite",
             ],
-        )
+        ),
+        timeout=10,
     ),
 
     tool_filter=[
