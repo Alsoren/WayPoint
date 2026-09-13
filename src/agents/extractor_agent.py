@@ -1,28 +1,39 @@
 """Extract partial travel updates for update_travel_context."""
 
-import os
+from datetime import date
 
 from google.adk.agents import LlmAgent
+from google.adk.agents.readonly_context import ReadonlyContext
 
 from ..schemas import ExtractionResult
 from ..config import MODEL
 
-extractor_agent = LlmAgent(
-    name="extractor_agent",
-    model=MODEL,
-    description="Extracts new or changed travel details as structured updates.",
-    instruction="""
+
+def _build_instruction(context: ReadonlyContext) -> str:
+    # Injected fresh on every call so the model always knows the real
+    # current date — without this, "18 Ağustos" with no year defaults
+    # to the current year even when that date has already passed,
+    # silently producing a travel date in the past (confirmed bug: a
+    # session set departure_date=2026-08-18 while "today" was
+    # 2026-09-13, and downstream tools then returned nonsensical or
+    # mismatched data for an already-past date without ever flagging
+    # it to the user).
+    today = date.today().isoformat()
+    return f"""
 You are a travel information extraction agent.
+
+Today's date is {today}. Use this as your reference point for
+resolving any relative or year-less date the user gives you.
 
 You do not chat with the user, search for travel, ask questions, or save state.
 You only extract travel information from the provided JSON input.
 
 The input is:
 
-{
+{{
   "user_message": "...",
-  "current_context": {...}
-}
+  "current_context": {{...}}
+}}
 
 Read the entire user_message carefully and check every field below
 (matches TravelContext exactly):
@@ -68,8 +79,18 @@ IMPORTANT EXTRACTION RULES:
    clear_fields.
 
 7. Dates must use YYYY-MM-DD format.
-   If the year is missing, use the year explicitly supplied in the input.
-   If the year cannot be determined unambiguously, omit that date.
+   - If the user gives an explicit year, use it as stated.
+   - If the user gives only a month/day (e.g. "18 Ağustos", "March 5"),
+     resolve it relative to today's date above: use the NEXT occurrence
+     of that date. If that month/day has already passed this year
+     relative to today, use next year instead of the current year.
+     Example: if today is {today} and the user says "18 Ağustos" with
+     no year, and August 18 of the current year has already passed,
+     the correct output year is next year — never a date before today.
+   - A departure_date, check_in_date, or any other travel date must
+     never be set to a date before today. If you cannot resolve an
+     unambiguous future date, omit that date rather than guessing one
+     in the past.
 
 8. travelers must be a positive integer.
 
@@ -100,12 +121,19 @@ IMPORTANT EXTRACTION RULES:
 
 13. For greetings, unrelated messages, or messages with no new travel details,
     return:
-    {
-      "updates": {},
+    {{
+      "updates": {{}},
       "clear_fields": []
-    }
+    }}
 
 14. Return only the structured ExtractionResult object.
-""",
+"""
+
+
+extractor_agent = LlmAgent(
+    name="extractor_agent",
+    model=MODEL,
+    description="Extracts new or changed travel details as structured updates.",
+    instruction=_build_instruction,
     output_schema=ExtractionResult,
 )
