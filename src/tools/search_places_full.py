@@ -29,6 +29,18 @@ from google.adk.tools import ToolContext
 
 from ..mcp_tools.osm import osm_mcp
 
+# How long to wait for a single category before giving up on it and
+# moving to a fallback. A live trace showed "attraction"/"museum" both
+# failing back-to-back at 45s each (~90s wasted before even reaching a
+# working fallback category, ~2 minutes total for the whole tool call).
+# Lowered to 18s: real Overpass timeouts/queue failures for these dense
+# tags have consistently shown up well under that in practice, and a
+# category that hasn't answered by 18s is not going to suddenly recover
+# — cutting our own wait short gets to a working fallback much faster
+# without meaningfully increasing the odds of abandoning a call that
+# would have succeeded.
+PER_CATEGORY_TIMEOUT_S = 18
+
 
 def _extract_payload(result: Any) -> tuple[dict[str, Any] | None, str | None]:
     """Unwrap the MCP tool envelope and parse the JSON text inside it."""
@@ -77,7 +89,7 @@ async def search_places_full(
     near: str,
     categories: list[str],
     tool_context: ToolContext,
-    radius_m: int = 2000,
+    radius_m: int = 1200,
     limit_per_category: int = 5,
     fallback_categories: list[str] | None = None,
 ) -> dict[str, Any]:
@@ -89,17 +101,30 @@ async def search_places_full(
         near: Place name, address, or "lat,lon" coordinates.
         categories: Category shortcuts to search, in priority order
             (e.g. ["attraction", "museum"]). Searched one at a time.
-        radius_m: Search radius in meters (50-10000). Default 2000 —
-            deliberately smaller than osm-mcp's own 1000 default upgrade
-            room, since smaller radii have been more reliable in
-            practice; widen only if results come back too sparse.
-        limit_per_category: Max results per category (1-25).
+        radius_m: Search radius in meters. Clamped to 50-2500 (NOT
+            10000 — see note below). Default 1200 (deliberately small)
+            — a live trace showed dense tags like
+            "attraction"/"museum"/"monument"/"viewpoint" in a historic
+            city center returning so many matching OSM elements within
+            a 3000m radius that Overpass's own internal timeout was hit
+            before it could even respond with an error, costing ~25s
+            per failed category. The upper clamp is capped at 2500 (down
+            from a looser 10000) specifically because the model has been
+            observed passing radius_m=3000 anyway, defeating the
+            small-default intent — capping the ceiling, not just the
+            default, is what actually prevents that. Widen only as a
+            deliberate follow-up if results come back too sparse - never
+            start wide.
+        limit_per_category: Max results per category. Clamped to 1-25.
         fallback_categories: If a category in `categories` errors or
             times out, try the next unused category from this list
             instead (skipping it, not retrying the failed one). Pass
             categories known to be lower-risk, e.g. ["park", "viewpoint",
             "monument"].
     """
+    radius_m = max(50, min(2500, radius_m))
+    limit_per_category = max(1, min(25, limit_per_category))
+
     tools = await osm_mcp.get_tools()
     find_tool = next((t for t in tools if t.name == "find_nearby_pois"), None)
     if find_tool is None:
@@ -127,7 +152,7 @@ async def search_places_full(
                     },
                     tool_context=tool_context,
                 ),
-                timeout=45,
+                timeout=PER_CATEGORY_TIMEOUT_S,
             )
         except asyncio.TimeoutError:
             errors[category] = "timed out"

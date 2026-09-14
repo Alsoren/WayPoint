@@ -2,17 +2,23 @@
 `get_forecast`.
 
 Why this exists: get_forecast has NO target-date parameter — it only
-returns "the next N days from today" (max ~16). A trace showed
-sightseeing_agent calling it anyway for a date ~11 months out; the tool
-silently returned THIS week's forecast (since that's all it can ever
-return), and the agent's own written instruction ("don't bother calling
-get_forecast if the date is >16 days out") was not reliably followed by
-the small model actually running it.
+returns "the next N days from today" (max ~16), with no way to skip
+straight to a single future day. A trace showed sightseeing_agent
+calling it anyway for a date ~11 months out; the tool silently returned
+THIS week's forecast (since that's all it can ever return), and the
+agent's own written instruction ("don't bother calling get_forecast if
+the date is >16 days out") was not reliably followed by the small model
+actually running it.
 
 This wrapper does the date math in Python, not in the LLM's head: it
 never calls get_forecast at all when the requested date falls outside
-the tool's real window, so there is no way for a mismatched week's data
-to reach the model in the first place.
+the tool's real window. It also fixes a second issue: since the
+underlying tool can only return a block starting from TODAY, asking
+about a single day still requires fetching every day in between — but
+there is no reason to hand all of those intervening days to the model
+too. This wrapper slices the response down to just the requested
+date(s) before returning, so a single-day question gets a single day's
+answer, not a full week dumped on top of it.
 """
 
 from datetime import date, datetime
@@ -42,37 +48,62 @@ def _extract_text(result: Any) -> tuple[str | None, str | None]:
     return text, None
 
 
+def _slice_days(forecast_text: str, start_index: int, end_index: int) -> str:
+    """The tool returns one block of text per day, starting with today
+    (index 0), separated by blank lines, after a one-line title. Slice
+    out only the blocks for [start_index, end_index] (inclusive) so a
+    single-day question doesn't drag the intervening days along too.
+    """
+    parts = forecast_text.split("\n\n")
+    if not parts:
+        return forecast_text
+    title, day_blocks = parts[0], parts[1:]
+    wanted = day_blocks[start_index : end_index + 1]
+    if not wanted:
+        return forecast_text  # fall back to returning everything
+    return title + "\n\n" + "\n\n".join(wanted)
+
+
 async def check_weather_full(
     destination: str,
-    check_in_date: str,
-    check_out_date: str,
+    date_from: str,
     tool_context: ToolContext,
+    date_to: str | None = None,
 ) -> dict[str, Any]:
-    """Check the real weather forecast for a trip, but ONLY if the trip
-    actually falls within the forecast tool's real range (today to
-    ~16 days out). Otherwise returns available=false immediately,
-    without ever calling get_forecast — so a mismatched week's forecast
-    can never be mistaken for the requested dates.
+    """Check the real weather forecast for one date, or a date range,
+    but ONLY if it actually falls within the forecast tool's real range
+    (today to ~16 days out). Otherwise returns available=false
+    immediately, without ever calling get_forecast — so a mismatched
+    week's forecast can never be mistaken for the requested date(s).
+    Returns only the requested date(s), not every day in between.
 
     Args:
         destination: City/place name to check weather for.
-        check_in_date: Trip start date, ISO format (YYYY-MM-DD).
-        check_out_date: Trip end date, ISO format (YYYY-MM-DD).
+        date_from: The date to check, ISO format (YYYY-MM-DD). Use this
+            alone for a single-day question ("what's the weather on the
+            18th") — there is no need to also know a checkout/return
+            date just to check weather for one day.
+        date_to: Optional end of a date range (ISO format), if checking
+            weather across multiple days (e.g. a whole trip). Omit for
+            a single-day check — it defaults to date_from.
     """
+    date_to = date_to or date_from
+
     try:
-        start = datetime.strptime(check_in_date, "%Y-%m-%d").date()
-        end = datetime.strptime(check_out_date, "%Y-%m-%d").date()
+        start = datetime.strptime(date_from, "%Y-%m-%d").date()
+        end = datetime.strptime(date_to, "%Y-%m-%d").date()
     except ValueError as e:
         return {"available": False, "reason": f"Could not parse dates: {e}"}
 
     today = date.today()
     days_until_start = (start - today).days
+    days_until_end = (end - today).days
 
     if days_until_start < 0:
         return {
             "available": False,
             "reason": (
-                f"{check_in_date} is in the past relative to today "
+                f"{date_from} is in the past relative to today "
                 f"({today.isoformat()}) — no forecast to check."
             ),
         }
@@ -81,16 +112,15 @@ async def check_weather_full(
         return {
             "available": False,
             "reason": (
-                f"{check_in_date} is {days_until_start} days from today "
+                f"{date_from} is {days_until_start} days from today "
                 f"({today.isoformat()}); real forecasts only cover the "
                 f"next {MAX_FORECAST_DAYS} days. No forecast exists yet "
-                "for this trip — do not substitute another week's data "
+                "for this date — do not substitute another day's data "
                 "or a general seasonal guess presented as a forecast."
             ),
         }
 
-    days_needed = min(MAX_FORECAST_DAYS, (end - today).days + 1)
-    days_needed = max(days_needed, days_until_start + 1)
+    days_needed = min(MAX_FORECAST_DAYS, days_until_end + 1)
 
     tools = await weather_mcp.get_tools()
     search_tool = next((t for t in tools if t.name == "search_location"), None)
@@ -105,8 +135,6 @@ async def check_weather_full(
     if loc_error is not None:
         return {"available": False, "reason": f"Location lookup failed: {loc_error}"}
 
-    # search_location returns a numbered text list; take the first
-    # "Coordinates: lat, lon" pair as the best match.
     import re
 
     match = re.search(r"Coordinates:\s*(-?\d+\.?\d*),\s*(-?\d+\.?\d*)", loc_text)
@@ -130,8 +158,10 @@ async def check_weather_full(
     if forecast_error is not None:
         return {"available": False, "reason": f"Forecast lookup failed: {forecast_error}"}
 
+    sliced = _slice_days(forecast_text, days_until_start, days_until_end)
+
     return {
         "available": True,
-        "raw_forecast": forecast_text,
-        "requested_range": f"{check_in_date} to {check_out_date}",
+        "raw_forecast": sliced,
+        "requested_range": f"{date_from} to {date_to}" if date_to != date_from else date_from,
     }

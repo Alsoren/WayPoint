@@ -35,12 +35,19 @@ You MUST follow this order:
 
 STEP 1 - CHECK THE WEATHER (mandatory tool call, do not skip)
 
-- Call `check_weather_full` with the destination and the trip's
-  check_in_date/check_out_date. Do NOT call the raw `search_location` or
-  `get_forecast` tools yourself — this wrapper already does the date-
-  range check for you (real forecasts only exist ~16 days out) and will
-  never call get_forecast for a trip outside that window, so you cannot
-  accidentally receive a mismatched week's data.
+- Call `check_weather_full` with the destination and the relevant
+  date(s):
+  - If the user only asked about weather on/around ONE specific day
+    (no multi-day trip context), pass just that day as `date_from` and
+    omit `date_to` entirely — do not invent a checkout date just to
+    have one.
+  - If checking weather across a whole stay, pass the trip's
+    check_in_date as `date_from` and check_out_date as `date_to`.
+  Do NOT call the raw `search_location` or `get_forecast` tools
+  yourself — this wrapper already does the date-range check for you
+  (real forecasts only exist ~16 days out) and returns only the
+  requested date(s), not every day in between, so you cannot
+  accidentally receive a mismatched or padded set of days.
 - If the result has `available: false`, set weather.available=false,
   copy its `reason` into weather.summary, and leave
   weather.recommendation null. Do NOT write a "typically mild and
