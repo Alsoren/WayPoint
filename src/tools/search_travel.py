@@ -4,6 +4,8 @@ from typing import Any
 
 from google.adk.tools import ToolContext
 
+from datetime import date
+
 from ..agent_runner import run_agent
 from ..agents.flight_agent import flight_agent
 from ..agents.hotel_agent import hotel_agent
@@ -30,9 +32,7 @@ REQUIRED_FIELDS = {
         "check_out_date",
         "travelers",
     ],
-    "sightseeing": [
-        "destination",
-    ],
+    "sightseeing": [],
 }
 
 
@@ -40,7 +40,6 @@ def validate_agent_data(
     agent_type: str,
     data: dict[str, Any],
 ) -> dict[str, Any]:
-    """Ajan için gerekli alanların mevcut olup olmadığını kontrol eder."""
 
     if agent_type not in AGENT_REGISTRY:
         return {
@@ -57,6 +56,7 @@ def validate_agent_data(
 
         if value is None:
             missing_fields.append(field)
+
         elif isinstance(value, str) and not value.strip():
             missing_fields.append(field)
 
@@ -80,20 +80,11 @@ def validate_agent_data(
 
 async def search_travel(
     tasks: list[str],
+    user_request: str,
     tool_context: ToolContext,
 ) -> dict[str, Any]:
-    context = tool_context.state.get("context", {})
 
-    context_message = json.dumps(
-        {
-            "travel_context": context,
-            "instruction": (
-                "Search according to this travel context "
-                "and return structured results."
-            ),
-        },
-        ensure_ascii=False,
-    )
+    context = tool_context.state.get("context", {})
 
     for task in tasks:
         validation = validate_agent_data(
@@ -112,11 +103,31 @@ async def search_travel(
                 ),
             }
 
+        current_date = date.today().isoformat()
+
+        specialist_message = json.dumps(
+            {
+                "current_date": current_date,
+                "user_request": user_request,
+                "travel_context": context,
+                "instruction": (
+                    "Handle the current user request. "
+                    "Use current_date as the reference date for resolving "
+                    "dates that do not include a year. "
+                    "Use travel_context only as supporting context. "
+                    "Do not replace or reinterpret the current user request "
+                    "as a generic travel search."
+                ),
+            },
+            ensure_ascii=False,
+            default=str,
+        )
+
     outputs = await asyncio.gather(
         *[
             run_agent(
                 agent=AGENT_REGISTRY[task],
-                message=context_message,
+                message=specialist_message,
                 tool_context=tool_context,
             )
             for task in tasks

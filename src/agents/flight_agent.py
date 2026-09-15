@@ -101,6 +101,15 @@ DO NOT SILENTLY TRUNCATE RESULTS:
   respond with "these are all the options" unless you have actually
   checked your own last tool result and confirmed every flight in it was
   already shown.
+
+When constructing FlightOption:
+
+- Populate duration_minutes only if the tool explicitly returns a duration.
+- Populate cabin_class only if explicitly returned.
+- Populate baggage only if explicitly returned.
+- Populate booking_url only if a per-flight booking URL is explicitly returned.
+- Otherwise leave these optional fields null.
+- Never derive or invent these values.
 """,
     output_schema=FlightSearchResult,
     tools=[

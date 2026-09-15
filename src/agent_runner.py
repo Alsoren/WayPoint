@@ -7,7 +7,7 @@ from google.adk.agents import LlmAgent
 from google.adk.tools import ToolContext
 from google.adk.tools.agent_tool import AgentTool
 from google.genai.errors import ClientError
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, TypeAdapter
 
 
 def _extract_retry_delay_seconds(error: ClientError, default: float) -> float:
@@ -92,7 +92,10 @@ async def run_agent(
         if isinstance(result, BaseModel):
             return result.model_dump(mode="json", exclude_unset=True)
         if isinstance(result, dict):
-            return result
+            return TypeAdapter(dict[str, Any]).dump_python(
+                result,
+                mode="json",
+            )
         if isinstance(result, str) and result.strip():
             return result
 

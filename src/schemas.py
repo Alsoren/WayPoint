@@ -1,6 +1,6 @@
 """Travel context and structured extractor output (Pydantic v2)."""
 
-from datetime import date
+from datetime import date as Date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,22 +21,22 @@ class TravelContext(BaseModel):
         description="Main destination city.",
     )
 
-    departure_date: date | None = Field(
+    departure_date: Date | None = Field(
         default=None,
         description="Flight departure date in YYYY-MM-DD format.",
     )
 
-    return_date: date | None = Field(
+    return_date: Date | None = Field(
         default=None,
         description="Flight return date in YYYY-MM-DD format.",
     )
 
-    check_in_date: date | None = Field(
+    check_in_date: Date | None = Field(
         default=None,
         description="Hotel check-in date in YYYY-MM-DD format.",
     )
 
-    check_out_date: date | None = Field(
+    check_out_date: Date | None = Field(
         default=None,
         description="Hotel check-out date in YYYY-MM-DD format.",
     )
@@ -91,7 +91,32 @@ class TravelContext(BaseModel):
         description="Preferred hotel neighborhood or area, such as Çankaya.",
     )
 
-    preferred_hote_star: int | None = None
+    min_star_rating: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description="Minimum hotel star rating requested by the user.",
+    )
+
+    preferred_departure_period: Literal[
+        "morning",
+        "afternoon",
+        "evening",
+        "night",
+    ] | None = Field(
+        default=None,
+        description="Preferred time period for the outbound flight.",
+    )
+
+    preferred_return_period: Literal[
+        "morning",
+        "afternoon",
+        "evening",
+        "night",
+    ] | None = Field(
+        default=None,
+        description="Preferred time period for the return flight.",
+    )
 
 
 TravelField = Literal[
@@ -109,7 +134,10 @@ TravelField = Literal[
     "preferred_origin_airport",
     "preferred_return_airport",
     "preferred_hotel_area",
-    "preferred_hote_star",
+    "min_star_rating",
+    "preferred_departure_period",
+    "preferred_return_period"
+
 ]
 
 
@@ -139,15 +167,26 @@ class ExtractionResult(BaseModel):
 class FlightOption(BaseModel):
     airline: str
     flight_number: str | None = None
+
     origin: str
     destination: str
+
     origin_airport: str
     destination_airport: str
+
     departure_time: str
     arrival_time: str
+
+    duration_minutes: int | None = None
+
     price: float
     currency: str = "TRY"
+
     stops: int = 0
+
+    booking_url: str | None = None
+    cabin_class: str | None = None
+    baggage: str | None = None
 
 
 class FlightSearchResult(BaseModel):
@@ -157,15 +196,26 @@ class FlightSearchResult(BaseModel):
 
 
 class HotelOption(BaseModel):
+    hotel_id: str | None = None
+
     name: str
-    location: str
+    location: str | None = None
+
     rating: float | None = None
+    hotel_star: int | None = None
+
     nightly_price: float | None = None
     total_price: float | None = None
     currency: str = "TRY"
-    hotel_star: int | None = None
+
     amenities: list[str] = Field(default_factory=list)
 
+    phone: str | None = None
+    property_description: str | None = None
+    rooms_description: str | None = None
+
+    policies: list[str] = Field(default_factory=list)
+    faq: list[str] = Field(default_factory=list)
 
 class HotelSearchResult(BaseModel):
     options: list[HotelOption] = Field(default_factory=list)
@@ -175,22 +225,69 @@ class HotelSearchResult(BaseModel):
 
 class PlaceOption(BaseModel):
     name: str
-    category: str
-    location: str
-    description: str
+    category: str | None = None
+    location: str | None = None
+    description: str | None = None
+
     estimated_visit_minutes: int | None = None
+
     price: float | None = None
     currency: str = "TRY"
 
+    opening_hours: str | None = None
+    phone: str | None = None
+    website: str | None = None
+    rating: float | None = None
+
+    place_id: str | None = None
+    maps_url: str | None = None
+
 class WeatherSummary(BaseModel):
     available: bool = False
-    summary: str | None = None
+
+    date: str | None = Field(
+        default=None,
+        description="Weather date in YYYY-MM-DD format.",
+    )
+
     temperature: str | None = None
+    min_temperature: str | None = None
+    max_temperature: str | None = None
+
     conditions: str | None = None
-    recommendation: str | None = None
+    precipitation_probability: float | None = None
+    wind: str | None = None
+
+    summary: str | None = None
+
+class RouteSummary(BaseModel):
+    origin: str
+    destination: str
+
+    travel_mode: str | None = None
+
+    distance_meters: int | None = None
+    distance_text: str | None = None
+
+    duration_seconds: int | None = None
+    duration_text: str | None = None
+
+    route_summary: str | None = None
 
 class SightseeingSearchResult(BaseModel):
-    destination: str
+    request_type: Literal[
+        "place_discovery",
+        "place_details",
+        "weather",
+        "route",
+    ]
+
+    destination: str | None = None
+
     places: list[PlaceOption] = Field(default_factory=list)
+
     weather: WeatherSummary | None = None
+
+    route: RouteSummary | None = None
+
     search_summary: str

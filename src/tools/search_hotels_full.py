@@ -41,33 +41,40 @@ def _extract_hotel_id(hotel: dict[str, Any]) -> str | None:
 
 
 def _total_price(hotel: dict[str, Any]) -> float | None:
-  """Read the cheapest total price for a hotel from offers.cheapestRate.
+    offers = hotel.get("offers")
 
-  Prefers `displayPrice` (Vio's own "price to show" field). Falls back
-  to summing base + taxes + hotelFees when displayPrice is absent.
-  """
-  offers = hotel.get("offers")
-  if not isinstance(offers, dict):
+    if not isinstance(offers, dict):
+        return None
+
+    cheapest_rate = offers.get("cheapestRate")
+
+    if not isinstance(cheapest_rate, dict):
+        return None
+
+    base = cheapest_rate.get("base")
+    taxes = cheapest_rate.get("taxes")
+    hotel_fees = cheapest_rate.get("hotelFees")
+
+    parts = [base, taxes, hotel_fees]
+
+    numeric = [
+        float(value)
+        for value in parts
+        if isinstance(value, (int, float))
+    ]
+
+    if numeric:
+        return sum(numeric)
+
+    display_price = cheapest_rate.get("displayPrice")
+
+    if display_price is not None:
+        try:
+            return float(display_price)
+        except (TypeError, ValueError):
+            pass
+
     return None
-
-  cheapest_rate = offers.get("cheapestRate")
-  if not isinstance(cheapest_rate, dict):
-    return None
-
-  display_price = cheapest_rate.get("displayPrice")
-  if display_price is not None:
-    try:
-      return float(display_price)
-    except (TypeError, ValueError):
-      pass
-
-  parts = [
-      cheapest_rate.get("base"),
-      cheapest_rate.get("taxes"),
-      cheapest_rate.get("hotelFees"),
-  ]
-  numeric = [float(p) for p in parts if isinstance(p, (int, float))]
-  return sum(numeric) if numeric else None
 
 
 def _clean_hotel_for_llm(
@@ -169,11 +176,19 @@ async def search_hotels_full(
       "queries": [query_text],
       "checkIn": check_in_date,
       "checkOut": check_out_date,
-      "roomsConfiguration": [{"adults": travelers}],
+      "rooms": {"adults": travelers},
       "currency": "TRY",
       "priceMode": "total",
-      "include": ["location", "rating", "classification", "offer"],
-      "offers": {"mode": "top_offers", "sort": "price:total_asc"},
+      "searchMode": "deep",
+      "include": [
+          "location",
+          "rating",
+          "classification",
+          "offer",
+      ],
+      "offers": {
+          "mode": "cheapest",
+      },
       "sortField": "price",
       "sortOrder": "ascending",
       "pageSize": PAGE_SIZE,

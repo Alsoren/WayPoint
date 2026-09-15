@@ -52,6 +52,7 @@ Read the entire user_message carefully and check every field below
 - preferred_origin_airport
 - preferred_return_airport
 - preferred_hotel_area
+- min_star_rating
 
 Your output must match the ExtractionResult schema.
 
@@ -127,6 +128,15 @@ IMPORTANT EXTRACTION RULES:
     }}
 
 14. Return only the structured ExtractionResult object.
+
+15. min_star_rating:
+    - Extract only when the user explicitly states a hotel star requirement.
+    - Use an integer from 1 to 5.
+    - Examples:
+      "at least 4 stars" -> 4
+      "5-star hotel" -> 5
+      "3 stars or higher" -> 3
+    - Do not infer a star rating from words such as "nice", "good", or "cheap".
 """
 
 

@@ -3,6 +3,7 @@ from google.adk.agents import LlmAgent
 from ..mcp_tools.hotel_mpc import hotel_mcp
 from ..schemas import HotelSearchResult
 from ..tools.search_hotels_full import search_hotels_full
+from ..tools.get_hotel_details import get_hotel_details
 
 from ..config import MODEL
 
@@ -30,16 +31,65 @@ DETERMINE THE ACTION FIRST:
 
 ======================================================================
 ACTION 1: SPECIFIC HOTEL DETAILS / AMENITIES INQUIRY
-(e.g., "olanaklari nedir", "bu otelde ne var", "kahvalti dahil mi")
+(e.g., "olanaklari nedir", "bu otelde ne var", "kahvalti dahil mi",
+       "otoparki var mi", "wifi var mi", "giris cikis saatleri nedir")
 ======================================================================
-1. DO NOT call `search_hotels_full`.
-2. Retrieve the specific hotel details using `get_hotels` from `hotel_mcp` by passing its ID or name.
-3. Extract all facilities and amenities into the `amenities` list of HotelOption.
-4. Construct the HotelSearchResult:
-   - `options`: A single HotelOption representing this hotel with `amenities` populated.
-   - `search_summary`: A clear Turkish summary describing the hotel's amenities and key features.
-   - `source`: "Vio Hotel Details"
 
+Use this action when the user asks for information about ONE specific hotel.
+
+1. DO NOT call `search_hotels_full`.
+
+2. MUST call `get_hotel_details`.
+
+3. Pass:
+   - `hotel_name`: the specific hotel name
+   - `requested_info`: exactly what the user wants to know
+   - `hotel_id`: if a hotel ID is already known, otherwise null
+   - `check_in_date`: from travel_context when relevant
+   - `check_out_date`: from travel_context when relevant
+   - `travelers`: from travel_context when relevant
+
+4. Use ONLY information returned by `get_hotel_details`.
+
+5. Construct HotelOption from the returned data:
+
+- `hotel_id`: returned id
+- `name`: returned hotel name
+- `location`: returned location/address
+- `rating`: returned rating
+- `hotel_star`: returned star_rating
+- `total_price`: returned total_price if available
+- `currency`: returned currency if available, otherwise "TRY"
+- `amenities`: returned amenities, otherwise []
+- `phone`: returned phone if available
+- `property_description`: returned property_description if available
+- `rooms_description`: returned rooms_description if available
+
+- Convert `policies` into a list of concise human-readable strings.
+- Convert `faq` entries into a list of concise human-readable strings.
+- Never place raw dictionaries or objects into `HotelOption.policies`
+  or `HotelOption.faq`.
+
+6. Do NOT invent missing information.
+
+   If the requested information is not available:
+   - leave the corresponding optional field null/empty
+   - explain in `search_summary` that it could not be verified
+
+7. If `get_hotel_details` returns `needs_clarification`:
+   - do not guess which hotel the user means
+   - explain the available candidates in `search_summary`
+   - return `options` as []
+
+8. If `get_hotel_details` returns `not_found` or `error`:
+   - return `options` as []
+   - explain the issue clearly in `search_summary`
+
+9. Construct the final HotelSearchResult:
+
+   - `options`: normally one HotelOption for the requested hotel
+   - `search_summary`: answer the user's specific question using verified data
+   - `source`: "Vio Hotel Details"
 ======================================================================
 ACTION 2: HOTEL SEARCH / MORE HOTELS / STAR FILTER
 (e.g., "otel bul", "baska otel", "4 yildizli olsun", "cankayada otel")
@@ -107,6 +157,6 @@ CRITICAL OUTPUT RULES:
     output_schema=HotelSearchResult,
     tools=[
         search_hotels_full,
-        hotel_mcp,
+        get_hotel_details,
     ],
 )
