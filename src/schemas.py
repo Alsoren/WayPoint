@@ -13,12 +13,12 @@ class TravelContext(BaseModel):
 
     origin: str | None = Field(
         default=None,
-        description="Departure city or airport.",
+        description="Departure city. Do not store an airport code here.",
     )
 
     destination: str | None = Field(
         default=None,
-        description="Main destination city.",
+        description="Destination city. Do not store an airport code here.",
     )
 
     departure_date: Date | None = Field(
@@ -76,13 +76,11 @@ class TravelContext(BaseModel):
             "for cities with multiple airports (e.g. SAW vs IST)."
         ),
     )
-
-    preferred_return_airport: str | None = Field(
+    preferred_destination_airport: str | None = Field(
         default=None,
         description=(
-            "Preferred arrival/return airport explicitly stated by the "
-            "user, for cities with multiple airports. May differ from "
-            "preferred_origin_airport for open-jaw or mixed-airport trips."
+            "Preferred arrival airport for the destination city explicitly stated "
+            "by the user, such as SAW or IST."
         ),
     )
 
@@ -132,7 +130,7 @@ TravelField = Literal[
     "travel_theme",
     "travel_pace",
     "preferred_origin_airport",
-    "preferred_return_airport",
+    "preferred_destination_airport",
     "preferred_hotel_area",
     "min_star_rating",
     "preferred_departure_period",

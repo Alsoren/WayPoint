@@ -103,22 +103,47 @@ IMPORTANT EXTRACTION RULES:
 
 11. travel_pace may only be slow, medium, or fast.
 
-12. preferred_origin_airport / preferred_return_airport:
-    - These are airports, not cities — only set them when the user names a
-      specific airport or unambiguous airport code (e.g. "SAW", "Sabiha
-      Gökçen", "IST", "Atatürk Havalimanı"), not just the destination city.
-    - preferred_origin_airport is where the user wants to DEPART from
-      (outbound flight).
-    - preferred_return_airport is where the user wants to ARRIVE on the
-      way back (return/inbound flight) — only relevant for round trips,
-      and only when it may differ from the origin airport (e.g. open-jaw
-      trips, or a city served by multiple airports).
-    - If the user states a single preferred airport without distinguishing
-      outbound vs. return (e.g. "Sabiha Gökçen'den uçmak istiyorum" with no
-      trip structure implying otherwise), set preferred_origin_airport only.
-      Do not guess a value for preferred_return_airport.
-    - If the user says both flights should use the same airport (e.g. "hep
-      Sabiha Gökçen olsun"), set both fields to that airport.
+12. AIRPORT AND CITY EXTRACTION
+
+origin and destination must always contain city names.
+
+preferred_origin_airport and preferred_destination_airport are used only
+when the user explicitly specifies an airport or airport code.
+
+Rules:
+
+- If the user provides an airport code or airport name, store its city in
+  origin or destination and store the airport code in the corresponding
+  preferred airport field.
+
+- preferred_origin_airport is the airport used to depart from the origin city.
+
+- preferred_destination_airport is the airport used to arrive in the
+  destination city.
+
+- Never store airport codes such as ESB, SAW, IST, ADB, or AYT in
+  origin or destination.
+
+- If the user mentions only a city, do not set a preferred airport.
+
+- Do not guess the city if the airport cannot be identified confidently.
+
+Examples:
+
+"ESB to SAW"
+-> origin = "Ankara"
+-> destination = "Istanbul"
+-> preferred_origin_airport = "ESB"
+-> preferred_destination_airport = "SAW"
+
+"Ankara to Sabiha Gokcen"
+-> origin = "Ankara"
+-> destination = "Istanbul"
+-> preferred_destination_airport = "SAW"
+
+"Ankara to Istanbul"
+-> origin = "Ankara"
+-> destination = "Istanbul"
 
 13. For greetings, unrelated messages, or messages with no new travel details,
     return:
