@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useRef } from 'react';
 const AgentStateContext = createContext();
 
 // VITE_API_URL tanımlı değilse varsayılan yerel backend portuna (8000) yönlenir
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 export const QUERY_TYPES = {
   FLIGHT: 'flight',
