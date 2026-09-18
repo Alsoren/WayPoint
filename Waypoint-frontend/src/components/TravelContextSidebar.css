@@ -1,0 +1,169 @@
+.context-sidebar {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto; /* Internal scroll only if content exceeds sidebar */
+}
+
+/* Subtle internal scrollbar */
+.context-sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.context-sidebar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.sidebar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-brand-green);
+}
+
+.sidebar-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--color-brand-navy);
+}
+
+.intent-badge {
+  font-size: 11px;
+  font-weight: 700;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.state-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Boş durum — hiç veri yokken görünen tek, sakin kart. Büyük bir
+   fotoğraf/gradient yerine bilinçli olarak minimal: bir ikon ve tek
+   satır dürüst bilgi. Veri geldiği an bu kart kalkar, gerçek kartlar
+   yerini alır. */
+.empty-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 32px 20px;
+  border-radius: 14px;
+  background: var(--color-sunset-soft);
+}
+
+.empty-state-icon {
+  font-size: 26px;
+  opacity: 0.85;
+}
+
+.empty-state-caption {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #92400e;
+  max-width: 220px;
+}
+
+.state-card {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.state-card-header {
+  padding: 6px 10px;
+  background: #f1f5f9;
+  font-size: 11px;
+  font-weight: 700;
+  color: #334155;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.state-card-body {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.param-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.param-key {
+  color: #64748b;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.param-val {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.param-val.hotel-highlight {
+  color: #d97706;
+  background: #fef3c7;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.tool-execution-box {
+  background: #0f172a;
+  color: #38bdf8;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.tool-title {
+  color: #94a3b8;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+/* Vurgulanan alanlar (Havalimanı kodları ve bütçe için) */
+.param-val.highlight {
+  color: #0369a1;
+  background: #e0f2fe;
+  padding: 1px 6px;
+  border-radius: 4px;
+}

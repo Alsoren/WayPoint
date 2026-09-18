@@ -189,8 +189,8 @@ async def search_hotels_full(
       "offers": {
           "mode": "cheapest",
       },
-      "sortField": "price",
-      "sortOrder": "ascending",
+      "sortField": "popularity",
+      "sortOrder": "descending",
       "pageSize": PAGE_SIZE,
   }
   if filters:

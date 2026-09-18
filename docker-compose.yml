@@ -1,0 +1,59 @@
+services:
+  backend:
+    build:
+      context: ./Waypoint_backend
+      dockerfile: Dockerfile
+
+    container_name: waypoint-backend
+
+    env_file:
+      - ./Waypoint_backend/.env
+
+    ports:
+      - "8000:8000"
+
+    restart: unless-stopped
+
+    init: true
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/chat/health')"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./Waypoint-frontend
+      dockerfile: Dockerfile
+
+    container_name: waypoint-frontend
+
+    ports:
+      - "3000:80"
+
+    restart: unless-stopped
+
+    init: true
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

@@ -13,10 +13,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . .
 
-RUN uv sync --frozen --no-dev
-
 ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
 
-CMD ["adk", "web", "--host", "0.0.0.0", "--port", "8000", "--no-reload"]
+CMD ["sh", "-c", "uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000}"]
